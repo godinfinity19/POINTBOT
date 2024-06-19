@@ -2,15 +2,18 @@ import os
 import psycopg2
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext, Dispatcher
+from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext
 
 app = Flask(__name__)
 
 # إعداد قاعدة البيانات
-DATABASE_URL = os.getenv('DATABASE_URL')
+DATABASE_URL = os.getenv('postgres://reward_db_6744_user:9JafL71tVDrsGmrjYa4hiRnHNhNWAoZW@dpg-cpoeicqj1k6c73a67klg-a.virginia-postgres.render.com/reward_db_6744')
+API_TOKEN = os.getenv('7157789286:AAFVBQgNYHORN-q-R-RmjE8CHrf9aGAaH_s')
+RENDER_EXTERNAL_HOSTNAME = os.getenv('postgres://reward_db_6744_user:9JafL71tVDrsGmrjYa4hiRnHNhNWAoZW@dpg-cpoeicqj1k6c73a67klg-a.virginia-postgres.render.com/reward_db_6744')
+PORT = int(os.getenv('PORT', 10000))
 
 def get_db_connection():
-    conn = psycopg2.connect(postgres://reward_db_6744_user:9JafL71tVDrsGmrjYa4hiRnHNhNWAoZW@dpg-cpoeicqj1k6c73a67klg-a.virginia-postgres.render.com/reward_db_6744)
+    conn = psycopg2.connect(DATABASE_URL)
     return conn
 
 def create_tables():
@@ -88,7 +91,7 @@ def complete_task(update: Update, context: CallbackContext):
 # إعداد البوت
 def main():
     create_tables()
-    TOKEN = os.getenv('7157789286:AAFVBQgNYHORN-q-R-RmjE8CHrf9aGAaH_s')
+    TOKEN = API_TOKEN
     updater = Updater(TOKEN, use_context=True)
     dp = updater.dispatcher
 
@@ -97,15 +100,14 @@ def main():
     dp.add_handler(CommandHandler("tasks", tasks))
     dp.add_handler(CallbackQueryHandler(complete_task, pattern='^complete_'))
 
-    PORT = int(os.environ.get('PORT',  0.0.0.0))
     updater.start_webhook(listen="0.0.0.0", port=PORT, url_path=TOKEN)
-    updater.bot.set_webhook(f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}")
+    updater.bot.set_webhook(f"https://{RENDER_EXTERNAL_HOSTNAME}/{TOKEN}")
 
     app.run(host='0.0.0.0', port=PORT)
-
-if __name__ == '__main__':
-    main()
 
 @app.route('/')
 def home():
     return 'Hello, this is the PointBot!'
+
+if __name__ == '__main__':
+    main()
