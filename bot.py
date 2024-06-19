@@ -97,7 +97,7 @@ def main():
     dp.add_handler(CommandHandler("tasks", tasks))
     dp.add_handler(CallbackQueryHandler(complete_task, pattern='^complete_'))
 
-    PORT = int(os.environ.get('PORT', 5432))
+    PORT = int(os.environ.get('PORT', 10000))
     updater.start_webhook(listen="0.0.0.0", port=PORT, url_path=TOKEN)
     updater.bot.set_webhook(f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}")
 
