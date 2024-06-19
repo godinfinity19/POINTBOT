@@ -7,10 +7,9 @@ from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, Callback
 app = Flask(__name__)
 
 # إعداد قاعدة البيانات
-DATABASE_URL = os.getenv('postgres://reward_db_6744_user:9JafL71tVDrsGmrjYa4hiRnHNhNWAoZW@dpg-cpoeicqj1k6c73a67klg-a.virginia-postgres.render.com/reward_db_6744')
-API_TOKEN = os.getenv('7157789286:AAFVBQgNYHORN-q-R-RmjE8CHrf9aGAaH_s')
-RENDER_EXTERNAL_HOSTNAME = os.getenv('postgres://reward_db_6744_user:9JafL71tVDrsGmrjYa4hiRnHNhNWAoZW@dpg-cpoeicqj1k6c73a67klg-a.virginia-postgres.render.com/reward_db_6744')
-PORT = int(os.getenv('PORT', 10000))
+DATABASE_URL = "postgres://reward_db_6744_user:9JafL71tVDrsGmrjYa4hiRnHNhNWAoZW@dpg-cpoeicqj1k6c73a67klg-a.virginia-postgres.render.com/reward_db_6744"
+API_TOKEN = "7157789286:AAFVBQgNYHORN-q-R-RmjE8CHrf9aGAaH_s"
+PORT = 5000
 
 def get_db_connection():
     conn = psycopg2.connect(DATABASE_URL)
@@ -100,9 +99,7 @@ def main():
     dp.add_handler(CommandHandler("tasks", tasks))
     dp.add_handler(CallbackQueryHandler(complete_task, pattern='^complete_'))
 
-    updater.start_webhook(listen="0.0.0.0", port=PORT, url_path=TOKEN)
-    updater.bot.set_webhook(f"https://{RENDER_EXTERNAL_HOSTNAME}/{TOKEN}")
-
+    updater.start_polling()
     app.run(host='0.0.0.0', port=PORT)
 
 @app.route('/')
