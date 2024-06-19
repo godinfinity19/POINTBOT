@@ -7,10 +7,10 @@ from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, Callback
 app = Flask(__name__)
 
 # إعداد قاعدة البيانات
-DATABASE_URL = os.getenv('postgres://reward_db_6744_user:9JafL71tVDrsGmrjYa4hiRnHNhNWAoZW@dpg-cpoeicqj1k6c73a67klg-a.virginia-postgres.render.com/reward_db_6744')
+DATABASE_URL = os.getenv('DATABASE_URL')
 
 def get_db_connection():
-    conn = psycopg2.connect(DATABASE_URL)
+    conn = psycopg2.connect(postgres://reward_db_6744_user:9JafL71tVDrsGmrjYa4hiRnHNhNWAoZW@dpg-cpoeicqj1k6c73a67klg-a.virginia-postgres.render.com/reward_db_6744)
     return conn
 
 def create_tables():
@@ -101,7 +101,7 @@ def main():
     updater.start_webhook(listen="0.0.0.0", port=PORT, url_path=TOKEN)
     updater.bot.set_webhook(f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}")
 
-    updater.idle()
+    app.run(host='0.0.0.0', port=PORT)
 
 if __name__ == '__main__':
     main()
@@ -109,6 +109,3 @@ if __name__ == '__main__':
 @app.route('/')
 def home():
     return 'Hello, this is the PointBot!'
-
-if __name__ == '__main__':
-    main()
