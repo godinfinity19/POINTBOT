@@ -1,104 +1,114 @@
-import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackContext, MessageHandler, filters
+import os
 import psycopg2
+from flask import Flask, request
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext, Dispatcher
 
-# إعداد الاتصال بقاعدة البيانات
-conn = psycopg2.connect(
-    "postgres://reward_db_6744_user:9JafL71tVDrsGmrjYa4hiRnHNhNWAoZW@dpg-cpoeicqj1k6c73a67klg-a.virginia-postgres.render.com/reward_db_6744"
-)
-cur = conn.cursor()
+app = Flask(__name__)
 
-# إعداد تسجيل الدخول
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levellevelname)s - %(message)s', level=logging.INFO
-)
+# إعداد قاعدة البيانات
+DATABASE_URL = os.getenv('postgres://reward_db_6744_user:9JafL71tVDrsGmrjYa4hiRnHNhNWAoZW@dpg-cpoeicqj1k6c73a67klg-a.virginia-postgres.render.com/reward_db_6744')
 
-# تعريف البوت
-API_TOKEN = '7157789286:AAFVBQgNYHORN-q-R-RmjE8CHrf9aGAaH_s'
-application = Application.builder().token(API_TOKEN).build()
+def get_db_connection():
+    conn = psycopg2.connect(DATABASE_URL)
+    return conn
 
-# دالة بدء البوت
-async def start(update: Update, context: CallbackContext) -> None:
-    chat_id = update.message.chat_id
-    cur.execute("INSERT INTO users (chat_id) VALUES (%s) ON CONFLICT (chat_id) DO NOTHING;", (chat_id,))
+def create_tables():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            user_id SERIAL PRIMARY KEY,
+            telegram_id BIGINT UNIQUE,
+            points INTEGER DEFAULT 0
+        );
+    ''')
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS tasks (
+            task_id SERIAL PRIMARY KEY,
+            description TEXT,
+            points INTEGER
+        );
+    ''')
     conn.commit()
-    await update.message.reply_text('مرحبًا! لقد تم تسجيلك بنجاح. استخدم /points لعرض نقاطك.')
+    cur.close()
+    conn.close()
 
-# دالة عرض النقاط
-async def points(update: Update, context: CallbackContext) -> None:
-    chat_id = update.message.chat_id
-    cur.execute("SELECT points FROM users WHERE chat_id = %s;", (chat_id,))
+# أوامر البوت
+def start(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute('INSERT INTO users (telegram_id) VALUES (%s) ON CONFLICT (telegram_id) DO NOTHING', (user_id,))
+    conn.commit()
+    cur.close()
+    conn.close()
+    update.message.reply_text('مرحباً! أنا بوت النقاط. استخدم /points لمعرفة نقاطك.')
+
+def points(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute('SELECT points FROM users WHERE telegram_id = %s', (user_id,))
     points = cur.fetchone()[0]
-    await update.message.reply_text(f'لديك {points} نقطة.')
+    cur.close()
+    conn.close()
+    update.message.reply_text(f'لديك {points} نقطة.')
 
-# دالة عرض المهام
-async def tasks(update: Update, context: CallbackContext) -> None:
-    cur.execute("SELECT task_id, description, points FROM tasks;")
+def tasks(update: Update, context: CallbackContext):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute('SELECT task_id, description, points FROM tasks')
     tasks = cur.fetchall()
-    if tasks:
-        task_list = "\n".join([f"{task[1]} - {task[2]} نقطة" for task in tasks])
-        await update.message.reply_text(f'المهام المتاحة:\n{task_list}')
-    else:
-        await update.message.reply_text('لا توجد مهام متاحة حالياً.')
+    cur.close()
+    conn.close()
 
-# دالة إكمال المهام
-async def complete(update: Update, context: CallbackContext) -> None:
-    task_id = int(context.args[0])
-    chat_id = update.message.chat_id
+    keyboard = [
+        [InlineKeyboardButton(f'{task[1]} - {task[2]} نقطة', callback_data=f'complete_{task[0]}')] for task in tasks
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    update.message.reply_text('اختر مهمة لإتمامها:', reply_markup=reply_markup)
 
-    # تحقق من وجود المهمة
-    cur.execute("SELECT points FROM tasks WHERE task_id = %s;", (task_id,))
-    task = cur.fetchone()
-    if task:
-        task_points = task[0]
-        # تحديث نقاط المستخدم
-        cur.execute("UPDATE users SET points = points + %s WHERE chat_id = %s;", (task_points, chat_id))
-        conn.commit()
-        await update.message.reply_text(f'تم إكمال المهمة بنجاح! لقد حصلت على {task_points} نقطة.')
-    else:
-        await update.message.reply_text('المهمة غير موجودة.')
+def complete_task(update: Update, context: CallbackContext):
+    query = update.callback_query
+    query.answer()
+    task_id = int(query.data.split('_')[1])
+    user_id = query.from_user.id
 
-# دالة عرض الخدمات
-async def services(update: Update, context: CallbackContext) -> None:
-    cur.execute("SELECT service_id, description, points_required FROM services;")
-    services = cur.fetchall()
-    if services:
-        service_list = "\n".join([f"{service[1]} - {service[2]} نقطة" for service in services])
-        await update.message.reply_text(f'الخدمات المتاحة:\n{service_list}')
-    else:
-        await update.message.reply_text('لا توجد خدمات متاحة حالياً.')
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute('SELECT points FROM tasks WHERE task_id = %s', (task_id,))
+    task_points = cur.fetchone()[0]
+    cur.execute('UPDATE users SET points = points + %s WHERE telegram_id = %s', (task_points, user_id))
+    conn.commit()
+    cur.close()
+    conn.close()
+    query.edit_message_text('تم إكمال المهمة! تم إضافة النقاط إلى رصيدك.')
 
-# دالة استبدال النقاط بالخدمات
-async def redeem(update: Update, context: CallbackContext) -> None:
-    service_id = int(context.args[0])
-    chat_id = update.message.chat_id
+# إعداد البوت
+def main():
+    create_tables()
+    TOKEN = os.getenv('7157789286:AAFVBQgNYHORN-q-R-RmjE8CHrf9aGAaH_s')
+    updater = Updater(TOKEN, use_context=True)
+    dp = updater.dispatcher
 
-    # تحقق من وجود الخدمة
-    cur.execute("SELECT points_required FROM services WHERE service_id = %s;", (service_id,))
-    service = cur.fetchone()
-    if service:
-        points_required = service[0]
-        # تحقق من نقاط المستخدم
-        cur.execute("SELECT points FROM users WHERE chat_id = %s;", (chat_id,))
-        user_points = cur.fetchone()[0]
-        if user_points >= points_required:
-            # تحديث نقاط المستخدم
-            cur.execute("UPDATE users SET points = points - %s WHERE chat_id = %s;", (points_required, chat_id))
-            conn.commit()
-            await update.message.reply_text(f'تم استبدال النقاط بنجاح! لقد استخدمت {points_required} نقطة.')
-        else:
-            await update.message.reply_text('ليس لديك نقاط كافية.')
-    else:
-        await update.message.reply_text('الخدمة غير موجودة.')
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CommandHandler("points", points))
+    dp.add_handler(CommandHandler("tasks", tasks))
+    dp.add_handler(CallbackQueryHandler(complete_task, pattern='^complete_'))
 
-# إعداد معالجات الأوامر
-application.add_handler(CommandHandler("start", start))
-application.add_handler(CommandHandler("points", points))
-application.add_handler(CommandHandler("tasks", tasks))
-application.add_handler(CommandHandler("complete", complete))
-application.add_handler(CommandHandler("services", services))
-application.add_handler(CommandHandler("redeem", redeem))
+    PORT = int(os.environ.get('PORT', 5000))
+    updater.start_webhook(listen="0.0.0.0", port=PORT, url_path=TOKEN)
+    updater.bot.set_webhook(f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}")
 
-# بدء البوت
-application.run_polling()
+    updater.idle()
+
+if __name__ == '__main__':
+    main()
+
+@app.route('/')
+def home():
+    return 'Hello, this is the PointBot!'
+
+if __name__ == '__main__':
+    main()
